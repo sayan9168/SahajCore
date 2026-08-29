@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+sahajql_data.json
+sahajql_data_backup.json
+sahajql_aliases.json
+sahajql_audit.json
+sahajql_schema.json
+sahajql_views.json

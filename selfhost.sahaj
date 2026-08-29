@@ -1,0 +1,466 @@
+// SahajCore Self-Hosted Interpreter
+// An interpreter for SahajCore, written in SahajCore itself
+
+fn tokenize(src) {
+    let toks = []
+    let i = 0
+    let n = len(src)
+    let digits = "0123456789"
+    let letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"
+    let ws = " \t\r\n"
+    while i < n {
+        let c = src[i]
+        if c in ws {
+            i = i + 1
+        } else {
+            if c in digits {
+                let s = ""
+                while i < n and src[i] in "0123456789." {
+                    s = s + src[i]
+                    i = i + 1
+                }
+                push(toks, {"type": "num", "value": s})
+            } else {
+                if c == "\"" {
+                    let j = i + 1
+                    let s = ""
+                    while j < n and src[j] != "\"" {
+                        s = s + src[j]
+                        j = j + 1
+                    }
+                    push(toks, {"type": "str", "value": s})
+                    i = j + 1
+                } else {
+                    if c in letters or c in digits {
+                        let s = ""
+                        while i < n and (src[i] in letters or src[i] in digits) {
+                            s = s + src[i]
+                            i = i + 1
+                        }
+                        push(toks, {"type": "word", "value": s})
+                    } else {
+                        let two = ""
+                        if i + 1 < n {
+                            two = c + src[i + 1]
+                        }
+                        if two in ["==", "!=", "<=", ">="] {
+                            push(toks, {"type": "op", "value": two})
+                            i = i + 2
+                        } else {
+                            push(toks, {"type": "op", "value": c})
+                            i = i + 1
+                        }
+                    }
+                }
+            }
+        }
+    }
+    push(toks, {"type": "end", "value": ""})
+    return toks
+}
+
+fn peek(P) { return P.toks[P.pos] }
+fn eat(P) {
+    let t = P.toks[P.pos]
+    P.pos = P.pos + 1
+    return t
+}
+
+fn parse_block(P) {
+    eat(P)
+    let stmts = []
+    while peek(P).value != "}" {
+        push(stmts, parse_stmt(P))
+    }
+    eat(P)
+    return stmts
+}
+
+fn parse_block_or_if(P) {
+    if peek(P).type == "word" and peek(P).value == "if" {
+        let s = parse_stmt(P)
+        return [s]
+    }
+    return parse_block(P)
+}
+
+fn parse_stmt(P) {
+    let t = peek(P)
+    if t.type == "word" {
+        if t.value == "let" {
+            eat(P)
+            let name = eat(P).value
+            eat(P)
+            let val = parse_expr(P)
+            return {"kind": "let", "name": name, "value": val}
+        }
+        if t.value == "fn" {
+            eat(P)
+            let name = eat(P).value
+            eat(P)
+            let params = []
+            while peek(P).value != ")" {
+                push(params, eat(P).value)
+                if peek(P).value == "," {
+                    eat(P)
+                }
+            }
+            eat(P)
+            let body = parse_block(P)
+            return {"kind": "fndef", "name": name, "params": params, "body": body}
+        }
+        if t.value == "if" {
+            eat(P)
+            let cond = parse_expr(P)
+            let then = parse_block(P)
+            let els = []
+            if peek(P).type == "word" and peek(P).value == "else" {
+                eat(P)
+                els = parse_block_or_if(P)
+            }
+            return {"kind": "if", "cond": cond, "then": then, "els": els}
+        }
+        if t.value == "while" {
+            eat(P)
+            let cond = parse_expr(P)
+            let body = parse_block(P)
+            return {"kind": "while", "cond": cond, "body": body}
+        }
+        if t.value == "return" {
+            eat(P)
+            let val = null
+            if peek(P).value != "}" {
+                val = parse_expr(P)
+            }
+            return {"kind": "return", "value": val}
+        }
+        if P.toks[P.pos + 1].type == "op" and P.toks[P.pos + 1].value == "=" {
+            let name = eat(P).value
+            eat(P)
+            let val = parse_expr(P)
+            return {"kind": "assign", "name": name, "value": val}
+        }
+    }
+    let e = parse_expr(P)
+    return {"kind": "expr", "value": e}
+}
+
+fn parse_program(P) {
+    let stmts = []
+    while peek(P).type != "end" {
+        push(stmts, parse_stmt(P))
+    }
+    return {"kind": "prog", "body": stmts}
+}
+
+fn parse_expr(P) { return parse_or(P) }
+
+fn parse_or(P) {
+    let l = parse_and(P)
+    while peek(P).type == "word" and peek(P).value == "or" {
+        eat(P)
+        let r = parse_and(P)
+        l = {"kind": "bin", "op": "or", "l": l, "r": r}
+    }
+    return l
+}
+
+fn parse_and(P) {
+    let l = parse_cmp(P)
+    while peek(P).type == "word" and peek(P).value == "and" {
+        eat(P)
+        let r = parse_cmp(P)
+        l = {"kind": "bin", "op": "and", "l": l, "r": r}
+    }
+    return l
+}
+
+fn parse_cmp(P) {
+    let l = parse_add(P)
+    while peek(P).type == "op" and (peek(P).value == "==" or peek(P).value == "!=" or peek(P).value == "<" or peek(P).value == ">" or peek(P).value == "<=" or peek(P).value == ">=") {
+        let op = eat(P).value
+        let r = parse_add(P)
+        l = {"kind": "bin", "op": op, "l": l, "r": r}
+    }
+    return l
+}
+
+fn parse_add(P) {
+    let l = parse_mul(P)
+    while peek(P).type == "op" and (peek(P).value == "+" or peek(P).value == "-") {
+        let op = eat(P).value
+        let r = parse_mul(P)
+        l = {"kind": "bin", "op": op, "l": l, "r": r}
+    }
+    return l
+}
+
+fn parse_mul(P) {
+    let l = parse_unary(P)
+    while peek(P).type == "op" and (peek(P).value == "*" or peek(P).value == "/") {
+        let op = eat(P).value
+        let r = parse_unary(P)
+        l = {"kind": "bin", "op": op, "l": l, "r": r}
+    }
+    return l
+}
+
+fn parse_unary(P) {
+    if peek(P).type == "word" and peek(P).value == "not" {
+        eat(P)
+        return {"kind": "un", "op": "not", "v": parse_unary(P)}
+    }
+    if peek(P).type == "op" and peek(P).value == "-" {
+        eat(P)
+        return {"kind": "un", "op": "-", "v": parse_unary(P)}
+    }
+    return parse_primary(P)
+}
+
+fn parse_primary(P) {
+    let t = peek(P)
+    if t.type == "num" {
+        eat(P)
+        return {"kind": "num", "value": t.value}
+    }
+    if t.type == "str" {
+        eat(P)
+        return {"kind": "str", "value": t.value}
+    }
+    if t.type == "word" {
+        if t.value == "true" {
+            eat(P)
+            return {"kind": "bool", "value": 1}
+        }
+        if t.value == "false" {
+            eat(P)
+            return {"kind": "bool", "value": 0}
+        }
+        eat(P)
+        if peek(P).value == "(" {
+            eat(P)
+            let args = []
+            while peek(P).value != ")" {
+                push(args, parse_expr(P))
+                if peek(P).value == "," {
+                    eat(P)
+                }
+            }
+            eat(P)
+            return {"kind": "call", "name": t.value, "args": args}
+        }
+        return {"kind": "var", "name": t.value}
+    }
+    if t.value == "(" {
+        eat(P)
+        let e = parse_expr(P)
+        eat(P)
+        return e
+    }
+    print("Parse error at: " + t.value)
+    eat(P)
+    return {"kind": "num", "value": "0"}
+}
+
+fn new_env(parent) {
+    return {"vars": {}, "parent": parent}
+}
+
+fn env_has(env, name) {
+    if name in keys(env.vars) {
+        return 1
+    }
+    if env.parent == null {
+        return 0
+    }
+    return env_has(env.parent, name)
+}
+
+fn env_get(env, name) {
+    if name in keys(env.vars) {
+        return env.vars[name]
+    }
+    if env.parent == null {
+        return null
+    }
+    return env_get(env.parent, name)
+}
+
+fn env_set(env, name, value) {
+    env.vars[name] = value
+}
+
+fn env_assign(env, name, value) {
+    if name in keys(env.vars) {
+        env.vars[name] = value
+        return
+    }
+    if env.parent != null {
+        env_assign(env.parent, name, value)
+    }
+}
+
+fn call_builtin(name, args) {
+    if name == "print" {
+        let i = 0
+        while i < len(args) {
+            print(args[i])
+            i = i + 1
+        }
+        return null
+    }
+    if name == "str" { return str(args[0]) }
+    if name == "int" { return int(args[0]) }
+    if name == "len" { return len(args[0]) }
+    print("Unknown builtin: " + name)
+    return null
+}
+
+fn is_ret(v) {
+    if type(v) == "dict" {
+        return "__ret__" in keys(v)
+    }
+    return 0
+}
+
+fn eval_block(stmts, env) {
+    let i = 0
+    while i < len(stmts) {
+        let r = eval_stmt(stmts[i], env)
+        if is_ret(r) {
+            return r
+        }
+        i = i + 1
+    }
+    return null
+}
+
+fn eval_stmt(node, env) {
+    let k = node.kind
+    if k == "let" {
+        env_set(env, node.name, eval_node(node.value, env))
+        return null
+    }
+    if k == "assign" {
+        env_assign(env, node.name, eval_node(node.value, env))
+        return null
+    }
+    if k == "fndef" {
+        env_set(env, node.name, {"fnval": 1, "params": node.params, "body": node.body, "env": env})
+        return null
+    }
+    if k == "if" {
+        if eval_node(node.cond, env) {
+            return eval_block(node.then, env)
+        }
+        if len(node.els) > 0 {
+            return eval_block(node.els, env)
+        }
+        return null
+    }
+    if k == "while" {
+        while eval_node(node.cond, env) {
+            let r = eval_block(node.body, env)
+            if is_ret(r) {
+                return r
+            }
+        }
+        return null
+    }
+    if k == "return" {
+        let v = null
+        if node.value != null {
+            v = eval_node(node.value, env)
+        }
+        return {"__ret__": 1, "value": v}
+    }
+    if k == "expr" {
+        eval_node(node.value, env)
+        return null
+    }
+    return null
+}
+
+fn eval_node(node, env) {
+    let k = node.kind
+    if k == "num" {
+        if "." in node.value {
+            return float(node.value)
+        }
+        return int(node.value)
+    }
+    if k == "str" { return node.value }
+    if k == "bool" { return node.value }
+    if k == "var" { return env_get(env, node.name) }
+    if k == "un" {
+        let v = eval_node(node.v, env)
+        if node.op == "-" {
+            return 0 - v
+        }
+        return not v
+    }
+    if k == "bin" {
+        if node.op == "and" {
+            let l = eval_node(node.l, env)
+            if not l {
+                return l
+            }
+            return eval_node(node.r, env)
+        }
+        if node.op == "or" {
+            let l = eval_node(node.l, env)
+            if l {
+                return l
+            }
+            return eval_node(node.r, env)
+        }
+        let l = eval_node(node.l, env)
+        let r = eval_node(node.r, env)
+        if node.op == "+" { return l + r }
+        if node.op == "-" { return l - r }
+        if node.op == "*" { return l * r }
+        if node.op == "/" { return l / r }
+        if node.op == "==" { return l == r }
+        if node.op == "!=" { return l != r }
+        if node.op == "<" { return l < r }
+        if node.op == ">" { return l > r }
+        if node.op == "<=" { return l <= r }
+        if node.op == ">=" { return l >= r }
+        return null
+    }
+    if k == "call" {
+        let args = []
+        let i = 0
+        while i < len(node.args) {
+            push(args, eval_node(node.args[i], env))
+            i = i + 1
+        }
+        if env_has(env, node.name) {
+            let f = env_get(env, node.name)
+            let fenv = new_env(f.env)
+            let j = 0
+            while j < len(f.params) {
+                env_set(fenv, f.params[j], args[j])
+                j = j + 1
+            }
+            let res = eval_block(f.body, fenv)
+            if is_ret(res) {
+                return res.value
+            }
+            return null
+        }
+        return call_builtin(node.name, args)
+    }
+    print("Unknown node: " + k)
+    return null
+}
+
+print("=== SahajCore Self-Hosted Interpreter ===")
+print("Loading target.sahaj ...")
+let src = read_file("target.sahaj")
+let toks = tokenize(src)
+let P = {"toks": toks, "pos": 0}
+let ast = parse_program(P)
+let genv = new_env(null)
+eval_block(ast.body, genv)
+print("=== Self-hosted execution complete ===")

@@ -1,0 +1,16 @@
+// SahajCore Hello World
+let message = "Hello from SahajCore!"
+print(message)
+
+fn fibonacci(n) {
+    if n < 2 {
+        return n
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+let i = 0
+while i < 10 {
+    print("fib(" + str(i) + ") = " + str(fibonacci(i)))
+    i = i + 1
+}

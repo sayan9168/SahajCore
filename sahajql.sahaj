@@ -1,0 +1,107 @@
+// SahajQL implemented in SahajCore!
+// This is a self-hosted query language interpreter
+
+let DB_FILE = "sahajql_data.json"
+
+fn load_db() {
+    if not file_exists(DB_FILE) {
+        return {}
+    }
+    let content = read_file(DB_FILE)
+    return json_parse(content)
+}
+
+fn save_db(data) {
+    write_file(DB_FILE, json_stringify(data))
+}
+
+fn tokenize(query) {
+    // Simple tokenization
+    let tokens = []
+    let words = query
+    // Split by spaces (simplified)
+    let current = ""
+    let i = 0
+    while i < len(query) {
+        let c = query[i]
+        if c == " " {
+            if len(current) > 0 {
+                push(tokens, current)
+                current = ""
+            }
+        } else {
+            current = current + c
+        }
+        i = i + 1
+    }
+    if len(current) > 0 {
+        push(tokens, current)
+    }
+    return tokens
+}
+
+fn parse_and_execute(query) {
+    let tokens = tokenize(query)
+    if len(tokens) == 0 {
+        return "Empty query"
+    }
+    let cmd = tokens[0]
+    let db = load_db()
+    
+    if cmd == "get" {
+        let table = tokens[1]
+        if not (table in keys(db)) {
+            return "Table not found: " + table
+        }
+        return json_stringify(db[table])
+    }
+    if cmd == "add" {
+        let table = tokens[1]
+        if not (table in keys(db)) {
+            db[table] = []
+        }
+        // Parse key=value pairs
+        let record = {}
+        let i = 2
+        while i < len(tokens) {
+            let token = tokens[i]
+            let j = 0
+            let key = ""
+            let value = ""
+            while j < len(token) and token[j] != "=" {
+                key = key + token[j]
+                j = j + 1
+            }
+            j = j + 1
+            while j < len(token) {
+                value = value + token[j]
+                j = j + 1
+            }
+            record[key] = value
+            i = i + 1
+        }
+        push(db[table], record)
+        save_db(db)
+        return "Added to " + table
+    }
+    if cmd == "show" {
+        return json_stringify(keys(db))
+    }
+    return "Unknown command: " + cmd
+}
+
+// REPL
+print("SahajQL (running on SahajCore!)")
+print("Commands: get <table>, add <table> key=val, show tables")
+print("Type 'exit' to quit")
+let running = true
+while running {
+    let line = input("SahajQL> ")
+    if line == "exit" {
+        running = false
+    } else {
+        if len(line) > 0 {
+            print(parse_and_execute(line))
+        }
+    }
+}
