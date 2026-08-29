@@ -1,0 +1,12 @@
+print("=== SahajCore + SahajQL Integration ===")
+
+let base = "cd ~/SahajQL && python3 -m sahajql "
+
+let result = shell_exec(base + "get all users 2>/dev/null || echo 'No users yet'")
+print("Users: ${result}")
+
+shell_exec(base + "add user name=Bridge age=30")
+print("Added user via SahajQL")
+
+let users = shell_exec(base + "get all users")
+print("All users: ${users}")

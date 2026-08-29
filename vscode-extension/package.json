@@ -1,0 +1,29 @@
+{
+  "name": "sahajcore-vscode",
+  "displayName": "SahajCore Language Support",
+  "version": "1.0.0",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "sahajcore",
+        "aliases": [
+          "SahajCore"
+        ],
+        "extensions": [
+          ".sahaj"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "sahajcore",
+        "scopeName": "source.sahajcore",
+        "path": "./syntaxes/sahajcore.tmLanguage.json"
+      }
+    ]
+  }
+}

@@ -60,6 +60,12 @@ class Interp:
         self.g.set('regex', {'match': BFunc('match', lambda p, s: bool(_re.search(p, s))), 'find': BFunc('find', lambda p, s: _re.findall(p, s)), 'replace': BFunc('replace', lambda p, r, s: _re.sub(p, r, s))})
         self.g.set('fs', {'read': BFunc('read', lambda p: open(p).read()), 'write': BFunc('write', lambda p, c: open(p, 'w').write(c) or None), 'exists': BFunc('exists', os.path.exists), 'list': BFunc('list', os.listdir)})
         self.g.set('http', {'get': BFunc('get', lambda u: _u.urlopen(u).read().decode())})
+        import subprocess as _sp
+        def _shell(cmd):
+            if not cmd: return ''
+            p = _sp.run(cmd, shell=True, capture_output=True, text=True)
+            return p.stdout + p.stderr
+        self.g.set('shell_exec', BFunc('shell_exec', _shell))
     def check_type(self, v, ty):
         m = {'int': int, 'float': float, 'str': str, 'bool': bool, 'list': list, 'dict': dict}
         if ty in m:

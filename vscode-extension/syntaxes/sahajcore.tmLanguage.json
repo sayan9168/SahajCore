@@ -1,0 +1,25 @@
+{
+  "scopeName": "source.sahajcore",
+  "patterns": [
+    {
+      "match": "\\b(let|fn|return|if|else|while|for|in|class|extends|new|this|try|catch|throw|break|continue|match|case|async|await|yield|import)\\b",
+      "name": "keyword.control.sahajcore"
+    },
+    {
+      "match": "\\b(true|false|null)\\b",
+      "name": "constant.language.sahajcore"
+    },
+    {
+      "match": "\\b\\d+\\b",
+      "name": "constant.numeric.sahajcore"
+    },
+    {
+      "match": "\"[^\"]*\"",
+      "name": "string.quoted.double.sahajcore"
+    },
+    {
+      "match": "//.*$",
+      "name": "comment.line.sahajcore"
+    }
+  ]
+}

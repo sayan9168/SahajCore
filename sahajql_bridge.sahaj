@@ -1,0 +1,17 @@
+// SahajCore ↔ SahajQL bridge
+// Allows SahajCore programs to query SahajQL databases
+
+fn ql_connect(db_file) {
+    return {"file": db_file, "type": "sahajql"}
+}
+
+fn ql_exec(conn, query) {
+    // Execute SahajQL command via shell
+    let result = shell_exec("python3 -m sahajql " + query)
+    return result
+}
+
+fn shell_exec(cmd) {
+    // Built-in that runs shell commands
+    return ""
+}
