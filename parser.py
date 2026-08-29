@@ -41,19 +41,26 @@ class Parser:
         return e
 
     def parse_let(self):
-        self.eat('KEYWORD', 'let'); n = self.eat('IDENT').value; self.eat('SYMBOL', '=')
+        self.eat('KEYWORD', 'let'); n = self.eat('IDENT').value
+        ty = None
+        if self.peek() and self.peek().type == 'SYMBOL' and self.peek().value == ':':
+            self.eat(); ty = self.eat('IDENT').value
+        self.eat('SYMBOL', '=')
         v = self.parse_expr()
         if self.peek() and self.peek().value == ';': self.eat('SYMBOL', ';')
-        return ASTNode('Let', name=n, value=v)
+        return ASTNode('Let', name=n, value=v, ty=ty)
 
     def parse_fn(self):
         self.eat('KEYWORD', 'fn')
         name = None
         if self.peek().type == 'IDENT': name = self.eat('IDENT').value
-        self.eat('SYMBOL', '('); params = []
+        self.eat('SYMBOL', '('); params = []; ptypes = {}
         while self.peek() and self.peek().value != ')':
             if self.peek().type == 'IDENT':
-                params.append(self.eat('IDENT').value)
+                pn = self.eat('IDENT').value
+                if self.peek() and self.peek().type == 'SYMBOL' and self.peek().value == ':':
+                    self.eat(); ptypes[pn] = self.eat('IDENT').value
+                params.append(pn)
             elif self.peek().type == 'KEYWORD' and self.peek().value == 'this':
                 params.append(self.eat().value)
             else:
@@ -62,6 +69,7 @@ class Parser:
         self.eat('SYMBOL', ')'); body = self.parse_block()
         n = ASTNode('FnDef', name=name, params=params, body=body)
         n.is_async = False
+        n.ptypes = ptypes
         return n
 
     def parse_block(self):

@@ -1,6 +1,6 @@
 import sys, os
 sys.setrecursionlimit(20000)
-from lexer import tokenize
+from lexer import tokenize, KEYWORDS
 from parser import Parser
 from interpreter import Interp
 
@@ -11,17 +11,22 @@ def main():
     if sys.argv[1] in ('--vm', '--compile'):
         from vm import Compiler, VM
         src = open(sys.argv[2]).read()
-        ast = Parser(tokenize(src)).parse()
-        code = Compiler().compile(ast)
+        code = Compiler().compile(Parser(tokenize(src)).parse())
         if sys.argv[1] == '--compile':
-            for i, (op, arg) in enumerate(code):
-                print(f"{i:04} {op} {arg if arg is not None else ''}")
+            for i, (op, arg) in enumerate(code): print(f"{i:04} {op} {arg if arg is not None else ''}")
             return
-        VM(code).run()
-        return
+        VM(code).run(); return
     if sys.argv[1] == '--repl':
         interp = Interp()
-        print("SahajCore v3.0 REPL. Type 'exit'.")
+        try:
+            import readline
+            def complete(text, state):
+                opts = [w for w in KEYWORDS + interp.names() if w.startswith(text)]
+                return opts[state] if state < len(opts) else None
+            readline.set_completer(complete)
+            readline.parse_and_bind("tab: complete")
+        except Exception: pass
+        print("SahajCore v4.0 REPL. Tab=complete, Up/Down=history, 'exit' to quit.")
         while True:
             line = input("sahajcore> ")
             if line.strip() == 'exit': break
@@ -34,4 +39,5 @@ def main():
     src = open(sys.argv[1]).read()
     Interp().run(Parser(tokenize(src)).parse())
 
-main()
+if __name__ == '__main__':
+    main()

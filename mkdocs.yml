@@ -1,0 +1,11 @@
+site_name: SahajCore
+site_url: https://sayan9168.github.io/SahajCore/
+repo_url: https://github.com/sayan9168/SahajCore
+docs_dir: documentation
+theme:
+  name: readthedocs
+nav:
+  - Home: index.md
+  - Tutorial: tutorial.md
+  - Syntax: syntax.md
+  - Stdlib: stdlib.md

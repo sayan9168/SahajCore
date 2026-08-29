@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sahajcore"
+version = "4.0.0"
+description = "A minimalist programming language with self-hosting interpreter, OOP, async, generators and a bytecode VM"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+
+[project.scripts]
+sahajcore = "main:main"
+
+[tool.setuptools]
+py-modules = ["lexer", "parser", "interpreter", "vm", "main"]

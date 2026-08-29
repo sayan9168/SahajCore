@@ -52,6 +52,21 @@ class Interp:
         import math as _m
         self.g.set('math', {'sqrt': BFunc('sqrt', _m.sqrt), 'floor': BFunc('floor', _m.floor), 'ceil': BFunc('ceil', _m.ceil), 'pow': BFunc('pow', _m.pow), 'pi': _m.pi})
         self.g.set('string', {'upper': BFunc('upper', lambda s: s.upper()), 'lower': BFunc('lower', lambda s: s.lower()), 'reverse': BFunc('reverse', lambda s: s[::-1])})
+        import random as _r, re as _re, datetime as _dt, json as _j
+        import urllib.request as _u
+        self.g.set('random', {'int': BFunc('int', lambda a=0, b=100: _r.randint(a, b)), 'float': BFunc('float', _r.random), 'choice': BFunc('choice', _r.choice)})
+        self.g.set('datetime', {'now': BFunc('now', lambda: _dt.datetime.now().isoformat()), 'year': BFunc('year', lambda: _dt.datetime.now().year)})
+        self.g.set('json', {'parse': BFunc('parse', _j.loads), 'stringify': BFunc('stringify', _j.dumps)})
+        self.g.set('regex', {'match': BFunc('match', lambda p, s: bool(_re.search(p, s))), 'find': BFunc('find', lambda p, s: _re.findall(p, s)), 'replace': BFunc('replace', lambda p, r, s: _re.sub(p, r, s))})
+        self.g.set('fs', {'read': BFunc('read', lambda p: open(p).read()), 'write': BFunc('write', lambda p, c: open(p, 'w').write(c) or None), 'exists': BFunc('exists', os.path.exists), 'list': BFunc('list', os.listdir)})
+        self.g.set('http', {'get': BFunc('get', lambda u: _u.urlopen(u).read().decode())})
+    def check_type(self, v, ty):
+        m = {'int': int, 'float': float, 'str': str, 'bool': bool, 'list': list, 'dict': dict}
+        if ty in m:
+            if ty == 'int' and isinstance(v, bool): return False
+            return isinstance(v, m[ty])
+        return True
+    def names(self): return list(self.g.vars.keys())
     def has_yield(self, body):
         for s in body:
             if self._hy(s): return True
@@ -67,7 +82,9 @@ class Interp:
         return False
     def invoke(self, fn, args):
         fe = Env(fn.c)
-        for p, a in zip(fn.p, args): fe.set(p, a)
+        for p, a in zip(fn.p, args):
+            if p in getattr(fn, 'ptypes', {}) and not self.check_type(a, fn.ptypes[p]): raise TypeError(f'TypeError: arg {p} expected {fn.ptypes[p]}')
+            fe.set(p, a)
         try:
             for s in fn.b: self.ev(s, fe)
         except Ret as r: return r.v
@@ -111,7 +128,10 @@ class Interp:
         if t == 'List': return [self.ev(i, e) for i in n.its]
         if t == 'Dict': return {k: self.ev(v, e) for k, v in n.ps}
         if t == 'Var': return e.get(n.n)
-        if t == 'Let': v = self.ev(n.value, e); e.set(n.name, v); return v
+        if t == 'Let':
+            v = self.ev(n.value, e)
+            if getattr(n, 'ty', None) and not self.check_type(v, n.ty): raise TypeError(f'TypeError: {n.name} expected {n.ty}')
+            e.set(n.name, v); return v
         if t == 'Assign':
             v = self.ev(n.v, e)
             if n.t.type == 'Var':
@@ -195,6 +215,7 @@ class Interp:
             if isinstance(o, dict): return o.get(n.f)
         if t == 'FnDef':
             fn = Func(n.name, n.params, n.body, e)
+            fn.ptypes = getattr(n, 'ptypes', {})
             fn.gen = self.has_yield(n.body)
             fn.is_async = getattr(n, 'is_async', False)
             if n.name: e.set(n.name, fn)
