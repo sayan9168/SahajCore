@@ -3,8 +3,8 @@ class Token:
         self.type = type; self.value = value; self.line = line
     def __repr__(self): return f"Token({self.type}, {self.value!r})"
 
-KEYWORDS = ['let', 'fn', 'return', 'if', 'else', 'while', 'for', 'in', 'true', 'false', 'null', 'and', 'or', 'not', 'import', 'class', 'extends', 'new', 'this', 'try', 'catch', 'throw']
-SYMBOLS = ['{', '}', '(', ')', '[', ']', ',', ';', ':', '+=', '-=', '==', '!=', '<=', '>=', '+', '-', '*', '/', '%', '=', '<', '>', '.']
+KEYWORDS = ['let', 'fn', 'return', 'if', 'else', 'while', 'for', 'in', 'true', 'false', 'null', 'and', 'or', 'not', 'import', 'class', 'extends', 'new', 'this', 'try', 'catch', 'throw', 'break', 'continue', 'match', 'case']
+SYMBOLS = ['{', '}', '(', ')', '[', ']', ',', ';', ':', '+=', '-=', '==', '!=', '<=', '>=', '+', '-', '*', '/', '%', '=', '<', '>', '.', '?']
 
 def tokenize(source):
     tokens, i, line = [], 0, 1

@@ -30,6 +30,9 @@ class Parser:
             if t.value == 'class': return self.parse_class()
             if t.value == 'try': return self.parse_try()
             if t.value == 'throw': return self.parse_throw()
+            if t.value == 'break': self.eat(); return ASTNode('Break')
+            if t.value == 'continue': self.eat(); return ASTNode('Continue')
+            if t.value == 'match': return self.parse_match()
         e = self.parse_expr()
         if self.peek() and self.peek().value == ';': self.eat('SYMBOL', ';')
         return e
@@ -104,7 +107,28 @@ class Parser:
         if self.peek() and self.peek().value == ';': self.eat('SYMBOL', ';')
         return ASTNode('Throw', value=v)
 
-    def parse_expr(self): return self.parse_or()
+    def parse_expr(self): return self.parse_ternary()
+    def parse_ternary(self):
+        c = self.parse_or()
+        if self.peek() and self.peek().type == 'SYMBOL' and self.peek().value == '?':
+            self.eat()
+            a = self.parse_ternary()
+            self.eat('SYMBOL', ':')
+            b = self.parse_ternary()
+            return ASTNode('Ternary', c=c, a=a, b=b)
+        return c
+    def parse_match(self):
+        self.eat('KEYWORD', 'match')
+        subject = self.parse_expr()
+        self.eat('SYMBOL', '{')
+        cases = []
+        while self.peek() and not (self.peek().type == 'SYMBOL' and self.peek().value == '}'):
+            self.eat('KEYWORD', 'case')
+            pat = self.parse_prim()
+            body = self.parse_block()
+            cases.append((pat, body))
+        self.eat('SYMBOL', '}')
+        return ASTNode('Match', subject=subject, cases=cases)
     def parse_or(self):
         l = self.parse_and()
         while self.peek() and self.peek().value == 'or': self.eat(); l = ASTNode('Bin', op='or', l=l, r=self.parse_and())

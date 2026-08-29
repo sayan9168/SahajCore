@@ -1,0 +1,23 @@
+// break / continue
+for i in range(10) {
+    if i == 3 { continue }
+    if i == 7 { break }
+    print("i = ${i}")
+}
+
+// ternary
+let age = 20
+let status = age >= 18 ? "adult" : "minor"
+print("status: ${status}")
+
+// match
+let code = 2
+match code {
+    case 1 { print("one") }
+    case 2 { print("two") }
+    case _ { print("other") }
+}
+
+// math & string modules
+print("sqrt(16) = ${math.sqrt(16)}")
+print("upper: ${string.upper('hello')}")

@@ -4,6 +4,8 @@ class Ret(Exception):
     def __init__(self, v): self.v = v
 class Thr(Exception):
     def __init__(self, v): self.v = v
+class Brk(Exception): pass
+class Cont(Exception): pass
 class Env:
     def __init__(self, p=None): self.v, self.p = {}, p
     def get(self, n):
@@ -45,6 +47,11 @@ class Interp:
         self.g = Env()
         for n, f in {'print': lambda *a: print(*a) or None, 'len': len, 'str': str, 'int': int, 'float': float, 'range': lambda *a: list(range(*[int(x) for x in a])), 'type': lambda x: type(x).__name__, 'read_file': lambda p: open(p).read(), 'write_file': lambda p, c: open(p, 'w').write(c) or None}.items():
             self.g.set(n, BFunc(n, f))
+        self._register_modules()
+    def _register_modules(self):
+        import math as _m
+        self.g.set('math', {'sqrt': BFunc('sqrt', _m.sqrt), 'floor': BFunc('floor', _m.floor), 'ceil': BFunc('ceil', _m.ceil), 'pow': BFunc('pow', _m.pow), 'pi': _m.pi})
+        self.g.set('string', {'upper': BFunc('upper', lambda s: s.upper()), 'lower': BFunc('lower', lambda s: s.lower()), 'reverse': BFunc('reverse', lambda s: s[::-1])})
     def run(self, ast, env=None):
         env = env or self.g
         r = None
@@ -84,7 +91,8 @@ class Interp:
             if n.op == 'and': return self.ev(n.l, e) and self.ev(n.r, e)
             if n.op == 'or': return self.ev(n.l, e) or self.ev(n.r, e)
             l, r = self.ev(n.l, e), self.ev(n.r, e)
-            return {'+': l+r, '-': l-r, '*': l*r, '/': l/r, '%': l%r, '==': l==r, '!=': l!=r, '<': l<r, '>': l>r, '<=': l<=r, '>=': l>=r, 'in': l in r}[n.op]
+            if n.op == 'in': return l in r
+            return {'+': l+r, '-': l-r, '*': l*r, '/': l/r, '%': l%r, '==': l==r, '!=': l!=r, '<': l<r, '>': l>r, '<=': l<=r, '>=': l>=r}[n.op]
         if t == 'Un':
             v = self.ev(n.v, e)
             return -v if n.op == '-' else not v
@@ -144,6 +152,16 @@ class Interp:
             pc = e.get(n.parent) if n.parent else None; ms = {}; ce = Env(e)
             for m in n.methods: ms[m.name] = Func(m.name, m.params, m.body, ce)
             cls = Cls(n.name, pc, ms); e.set(n.name, cls); return cls
+        if t == 'Break': raise Brk()
+        if t == 'Continue': raise Cont()
+        if t == 'Ternary': return self.ev(n.a, e) if self.ev(n.c, e) else self.ev(n.b, e)
+        if t == 'Match':
+            val = self.ev(n.subject, e)
+            for pat, body in n.cases:
+                if (pat.type == 'Var' and pat.n == '_') or self.ev(pat, e) == val:
+                    for s in body: self.ev(s, e)
+                    break
+            return None
         if t == 'Return': raise Ret(self.ev(n.value, e))
         if t == 'Throw': raise Thr(self.ev(n.value, e))
         if t == 'Try':
@@ -159,9 +177,15 @@ class Interp:
                 for s in n.els: self.ev(s, e)
         if t == 'While':
             while self.ev(n.cond, e):
-                for s in n.body: self.ev(s, e)
+                try:
+                    for s in n.body: self.ev(s, e)
+                except Brk: break
+                except Cont: continue
         if t == 'For':
             for it in self.ev(n.iter, e):
                 le = Env(e); le.set(n.var, it)
-                for s in n.body: self.ev(s, le)
+                try:
+                    for s in n.body: self.ev(s, le)
+                except Brk: break
+                except Cont: continue
         return None
