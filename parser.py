@@ -1,241 +1,182 @@
 class ASTNode:
-    def __init__(self, type, **kwargs):
+    def __init__(self, type, **kw):
         self.type = type
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-    def __repr__(self):
-        attrs = ', '.join(f"{k}={v!r}" for k, v in self.__dict__.items() if k != 'type')
-        return f"{self.type}({attrs})"
+        for k, v in kw.items(): setattr(self, k, v)
 
 class Parser:
-    def __init__(self, tokens):
-        self.tokens = tokens
-        self.pos = 0
-    
-    def peek(self):
-        return self.tokens[self.pos] if self.pos < len(self.tokens) else None
-    
+    def __init__(self, tokens): self.tokens, self.pos = tokens, 0
+    def peek(self): return self.tokens[self.pos] if self.pos < len(self.tokens) else None
     def eat(self, type=None, value=None):
-        tok = self.peek()
-        if tok is None:
-            raise SyntaxError("Unexpected end of input")
-        if type and tok.type != type:
-            raise SyntaxError(f"Expected {type}, got {tok.type} ({tok.value!r}) at line {tok.line}")
-        if value is not None and tok.value != value:
-            raise SyntaxError(f"Expected {value!r}, got {tok.value!r} at line {tok.line}")
-        self.pos += 1
-        return tok
-    
+        t = self.peek()
+        if not t: raise SyntaxError("Unexpected EOF")
+        if type and t.type != type: raise SyntaxError(f"Expected {type}, got {t.type}")
+        if value is not None and t.value != value: raise SyntaxError(f"Expected {value}, got {t.value}")
+        self.pos += 1; return t
+
     def parse(self):
         stmts = []
-        while self.peek() and self.peek().type != 'EOF':
-            stmts.append(self.parse_statement())
+        while self.peek() and self.peek().type != 'EOF': stmts.append(self.parse_stmt())
         return ASTNode('Program', body=stmts)
-    
-    def parse_statement(self):
-        tok = self.peek()
-        if tok.type == 'KEYWORD':
-            if tok.value == 'let': return self.parse_let()
-            if tok.value == 'fn': return self.parse_fn()
-            if tok.value == 'return': return self.parse_return()
-            if tok.value == 'if': return self.parse_if()
-            if tok.value == 'while': return self.parse_while()
-            if tok.value == 'import': return self.parse_import()
-        expr = self.parse_expression()
-        if self.peek() and self.peek().value == ';':
-            self.eat('SYMBOL', ';')
-        return expr
-    
+
+    def parse_stmt(self):
+        t = self.peek()
+        if t.type == 'KEYWORD':
+            if t.value == 'let': return self.parse_let()
+            if t.value == 'fn': return self.parse_fn()
+            if t.value == 'return': return self.parse_return()
+            if t.value == 'if': return self.parse_if()
+            if t.value == 'while': return self.parse_while()
+            if t.value == 'for': return self.parse_for()
+            if t.value == 'class': return self.parse_class()
+            if t.value == 'try': return self.parse_try()
+            if t.value == 'throw': return self.parse_throw()
+        e = self.parse_expr()
+        if self.peek() and self.peek().value == ';': self.eat('SYMBOL', ';')
+        return e
+
     def parse_let(self):
-        self.eat('KEYWORD', 'let')
-        name = self.eat('IDENT').value
-        self.eat('SYMBOL', '=')
-        value = self.parse_expression()
-        if self.peek() and self.peek().value == ';':
-            self.eat('SYMBOL', ';')
-        return ASTNode('Let', name=name, value=value)
-    
+        self.eat('KEYWORD', 'let'); n = self.eat('IDENT').value; self.eat('SYMBOL', '=')
+        v = self.parse_expr()
+        if self.peek() and self.peek().value == ';': self.eat('SYMBOL', ';')
+        return ASTNode('Let', name=n, value=v)
+
     def parse_fn(self):
         self.eat('KEYWORD', 'fn')
-        name = self.eat('IDENT').value
-        self.eat('SYMBOL', '(')
-        params = []
+        name = None
+        if self.peek().type == 'IDENT': name = self.eat('IDENT').value
+        self.eat('SYMBOL', '('); params = []
         while self.peek() and self.peek().value != ')':
-            params.append(self.eat('IDENT').value)
-            if self.peek() and self.peek().value == ',':
-                self.eat('SYMBOL', ',')
-        self.eat('SYMBOL', ')')
-        body = self.parse_block()
+            if self.peek().type == 'IDENT':
+                params.append(self.eat('IDENT').value)
+            elif self.peek().type == 'KEYWORD' and self.peek().value == 'this':
+                params.append(self.eat().value)
+            else:
+                raise SyntaxError("Expected parameter name")
+            if self.peek().value == ',': self.eat('SYMBOL', ',')
+        self.eat('SYMBOL', ')'); body = self.parse_block()
         return ASTNode('FnDef', name=name, params=params, body=body)
-    
+
     def parse_block(self):
-        self.eat('SYMBOL', '{')
-        stmts = []
-        while self.peek() and self.peek().value != '}':
-            stmts.append(self.parse_statement())
-        self.eat('SYMBOL', '}')
-        return stmts
-    
+        self.eat('SYMBOL', '{'); stmts = []
+        while self.peek() and self.peek().value != '}': stmts.append(self.parse_stmt())
+        self.eat('SYMBOL', '}'); return stmts
+
     def parse_return(self):
         self.eat('KEYWORD', 'return')
-        if self.peek() and self.peek().value not in (';', '}'):
-            val = self.parse_expression()
-        else:
-            val = ASTNode('Null')
-        if self.peek() and self.peek().value == ';':
-            self.eat('SYMBOL', ';')
-        return ASTNode('Return', value=val)
-    
+        v = ASTNode('Null')
+        if self.peek() and self.peek().value not in (';', '}'): v = self.parse_expr()
+        if self.peek() and self.peek().value == ';': self.eat('SYMBOL', ';')
+        return ASTNode('Return', value=v)
+
     def parse_if(self):
-        self.eat('KEYWORD', 'if')
-        cond = self.parse_expression()
-        then = self.parse_block()
-        els = None
+        self.eat('KEYWORD', 'if'); c = self.parse_expr(); t = self.parse_block(); e = None
         if self.peek() and self.peek().value == 'else':
             self.eat('KEYWORD', 'else')
-            if self.peek() and self.peek().value == 'if':
-                els = [self.parse_if()]
-            else:
-                els = self.parse_block()
-        return ASTNode('If', condition=cond, then=then, els=els)
-    
+            e = [self.parse_if()] if self.peek().value == 'if' else self.parse_block()
+        return ASTNode('If', cond=c, then=t, els=e)
+
     def parse_while(self):
-        self.eat('KEYWORD', 'while')
-        cond = self.parse_expression()
-        body = self.parse_block()
-        return ASTNode('While', condition=cond, body=body)
-    
-    def parse_import(self):
-        self.eat('KEYWORD', 'import')
-        path = self.eat('STRING').value
-        if self.peek() and self.peek().value == ';':
-            self.eat('SYMBOL', ';')
-        return ASTNode('Import', path=path)
-    
-    def parse_expression(self):
-        return self.parse_or()
-    
+        self.eat('KEYWORD', 'while'); c = self.parse_expr(); b = self.parse_block()
+        return ASTNode('While', cond=c, body=b)
+
+    def parse_for(self):
+        self.eat('KEYWORD', 'for'); v = self.eat('IDENT').value; self.eat('KEYWORD', 'in')
+        it = self.parse_expr(); b = self.parse_block()
+        return ASTNode('For', var=v, iter=it, body=b)
+
+    def parse_class(self):
+        self.eat('KEYWORD', 'class'); n = self.eat('IDENT').value; p = None
+        if self.peek() and self.peek().value == 'extends': self.eat('KEYWORD', 'extends'); p = self.eat('IDENT').value
+        self.eat('SYMBOL', '{'); m = []
+        while self.peek() and self.peek().value != '}':
+            if self.peek().value == 'fn': m.append(self.parse_fn())
+            else: self.eat()
+        self.eat('SYMBOL', '}')
+        return ASTNode('ClassDef', name=n, parent=p, methods=m)
+
+    def parse_try(self):
+        self.eat('KEYWORD', 'try'); b = self.parse_block(); self.eat('KEYWORD', 'catch')
+        v = self.eat('IDENT').value; cb = self.parse_block()
+        return ASTNode('Try', body=b, var=v, catch=cb)
+
+    def parse_throw(self):
+        self.eat('KEYWORD', 'throw'); v = self.parse_expr()
+        if self.peek() and self.peek().value == ';': self.eat('SYMBOL', ';')
+        return ASTNode('Throw', value=v)
+
+    def parse_expr(self): return self.parse_or()
     def parse_or(self):
-        left = self.parse_and()
-        while self.peek() and self.peek().type == 'KEYWORD' and self.peek().value == 'or':
-            self.eat()
-            right = self.parse_and()
-            left = ASTNode('BinOp', op='or', left=left, right=right)
-        return left
-    
+        l = self.parse_and()
+        while self.peek() and self.peek().value == 'or': self.eat(); l = ASTNode('Bin', op='or', l=l, r=self.parse_and())
+        return l
     def parse_and(self):
-        left = self.parse_comparison()
-        while self.peek() and self.peek().type == 'KEYWORD' and self.peek().value == 'and':
-            self.eat()
-            right = self.parse_comparison()
-            left = ASTNode('BinOp', op='and', left=left, right=right)
-        return left
-    
-    def parse_comparison(self):
-        left = self.parse_add()
-        while self.peek() and (self.peek().value in ('==', '!=', '<', '>', '<=', '>=') or (self.peek().type == 'KEYWORD' and self.peek().value == 'in')):
-            op = self.eat().value
-            right = self.parse_add()
-            left = ASTNode('BinOp', op=op, left=left, right=right)
-        return left
-    
+        l = self.parse_cmp()
+        while self.peek() and self.peek().value == 'and': self.eat(); l = ASTNode('Bin', op='and', l=l, r=self.parse_cmp())
+        return l
+    def parse_cmp(self):
+        l = self.parse_add()
+        while self.peek() and self.peek().type == 'SYMBOL' and self.peek().value in ('==','!=','<','>','<=','>='):
+            o = self.eat().value; l = ASTNode('Bin', op=o, l=l, r=self.parse_add())
+        while self.peek() and self.peek().value == 'in': self.eat(); l = ASTNode('Bin', op='in', l=l, r=self.parse_add())
+        return l
     def parse_add(self):
-        left = self.parse_mul()
-        while self.peek() and self.peek().type == 'SYMBOL' and self.peek().value in ('+', '-'):
-            op = self.eat().value
-            right = self.parse_mul()
-            left = ASTNode('BinOp', op=op, left=left, right=right)
-        return left
-    
+        l = self.parse_mul()
+        while self.peek() and self.peek().type == 'SYMBOL' and self.peek().value in ('+','-'):
+            o = self.eat().value; l = ASTNode('Bin', op=o, l=l, r=self.parse_mul())
+        return l
     def parse_mul(self):
-        left = self.parse_unary()
-        while self.peek() and self.peek().type == 'SYMBOL' and self.peek().value in ('*', '/', '%'):
-            op = self.eat().value
-            right = self.parse_unary()
-            left = ASTNode('BinOp', op=op, left=left, right=right)
-        return left
-    
+        l = self.parse_unary()
+        while self.peek() and self.peek().type == 'SYMBOL' and self.peek().value in ('*','/','%'):
+            o = self.eat().value; l = ASTNode('Bin', op=o, l=l, r=self.parse_unary())
+        return l
     def parse_unary(self):
-        if self.peek() and self.peek().type == 'KEYWORD' and self.peek().value == 'not':
-            self.eat()
-            return ASTNode('Unary', op='not', operand=self.parse_unary())
-        if self.peek() and self.peek().type == 'SYMBOL' and self.peek().value == '-':
-            self.eat()
-            return ASTNode('Unary', op='-', operand=self.parse_unary())
-        return self.parse_postfix()
-    
-    def parse_postfix(self):
-        node = self.parse_primary()
+        if self.peek() and self.peek().value == 'not': self.eat(); return ASTNode('Un', op='not', v=self.parse_unary())
+        if self.peek() and self.peek().value == '-': self.eat(); return ASTNode('Un', op='-', v=self.parse_unary())
+        return self.parse_post()
+    def parse_post(self):
+        n = self.parse_prim()
         while True:
-            if self.peek() and self.peek().type == 'SYMBOL' and self.peek().value == '(':
-                self.eat('SYMBOL', '(')
-                args = []
+            if self.peek() and self.peek().value == '(':
+                self.eat('SYMBOL', '('); args = []
                 while self.peek() and self.peek().value != ')':
-                    args.append(self.parse_expression())
-                    if self.peek() and self.peek().value == ',':
-                        self.eat('SYMBOL', ',')
-                self.eat('SYMBOL', ')')
-                node = ASTNode('Call', callee=node, args=args)
-            elif self.peek() and self.peek().type == 'SYMBOL' and self.peek().value == '[':
-                self.eat('SYMBOL', '[')
-                idx = self.parse_expression()
-                self.eat('SYMBOL', ']')
-                node = ASTNode('Index', object=node, index=idx)
-            elif self.peek() and self.peek().type == 'SYMBOL' and self.peek().value == '.':
-                self.eat('SYMBOL', '.')
-                field = self.eat('IDENT').value
-                node = ASTNode('Field', object=node, field=field)
-            elif self.peek() and self.peek().type == 'SYMBOL' and self.peek().value in ('=', '+=', '-='):
-                op = self.eat().value
-                val = self.parse_expression()
-                node = ASTNode('Assign', target=node, op=op, value=val)
-            else:
-                break
-        return node
-    
-    def parse_primary(self):
-        tok = self.peek()
-        if tok is None:
-            raise SyntaxError("Unexpected end")
-        if tok.type == 'NUMBER':
-            self.eat()
-            return ASTNode('Number', value=tok.value)
-        if tok.type == 'STRING':
-            self.eat()
-            return ASTNode('String', value=tok.value)
-        if tok.type == 'BOOL':
-            self.eat()
-            return ASTNode('Bool', value=tok.value)
-        if tok.type == 'NULL':
-            self.eat()
-            return ASTNode('Null')
-        if tok.type == 'IDENT':
-            self.eat()
-            return ASTNode('Var', name=tok.value)
-        if tok.type == 'SYMBOL' and tok.value == '(':
-            self.eat()
-            expr = self.parse_expression()
-            self.eat('SYMBOL', ')')
-            return expr
-        if tok.type == 'SYMBOL' and tok.value == '[':
-            self.eat()
-            items = []
+                    args.append(self.parse_expr())
+                    if self.peek().value == ',': self.eat('SYMBOL', ',')
+                self.eat('SYMBOL', ')'); n = ASTNode('Call', c=n, args=args)
+            elif self.peek() and self.peek().value == '[':
+                self.eat('SYMBOL', '['); i = self.parse_expr(); self.eat('SYMBOL', ']'); n = ASTNode('Idx', o=n, i=i)
+            elif self.peek() and self.peek().value == '.':
+                self.eat('SYMBOL', '.'); f = self.eat('IDENT').value; n = ASTNode('Field', o=n, f=f)
+            elif self.peek() and self.peek().value in ('=','+=','-='):
+                o = self.eat().value; v = self.parse_expr(); n = ASTNode('Assign', t=n, op=o, v=v)
+            else: break
+        return n
+    def parse_prim(self):
+        t = self.peek()
+        if not t: raise SyntaxError("Unexpected EOF")
+        if t.type == 'NUMBER': self.eat(); return ASTNode('Num', v=t.value)
+        if t.type == 'STRING': self.eat(); return ASTNode('Str', v=t.value)
+        if t.type == 'INTERP': self.eat(); return ASTNode('IStr', p=t.value)
+        if t.type == 'BOOL': self.eat(); return ASTNode('Bool', v=t.value)
+        if t.type == 'NULL': self.eat(); return ASTNode('Null')
+        if t.type == 'IDENT': self.eat(); return ASTNode('Var', n=t.value)
+        if t.value == 'this': self.eat(); return ASTNode('This')
+        if t.value == 'new':
+            self.eat(); c = self.eat('IDENT').value; self.eat('SYMBOL', '('); args = []
+            while self.peek() and self.peek().value != ')':
+                args.append(self.parse_expr())
+                if self.peek().value == ',': self.eat('SYMBOL', ',')
+            self.eat('SYMBOL', ')'); return ASTNode('New', c=c, args=args)
+        if t.value == '(': self.eat(); e = self.parse_expr(); self.eat('SYMBOL', ')'); return e
+        if t.value == '[':
+            self.eat(); its = []
             while self.peek() and self.peek().value != ']':
-                items.append(self.parse_expression())
-                if self.peek() and self.peek().value == ',':
-                    self.eat('SYMBOL', ',')
-            self.eat('SYMBOL', ']')
-            return ASTNode('List', items=items)
-        if tok.type == 'SYMBOL' and tok.value == '{':
-            self.eat()
-            pairs = []
+                its.append(self.parse_expr())
+                if self.peek().value == ',': self.eat('SYMBOL', ',')
+            self.eat('SYMBOL', ']'); return ASTNode('List', its=its)
+        if t.value == '{':
+            self.eat(); ps = []
             while self.peek() and self.peek().value != '}':
-                key = self.eat('STRING').value
-                self.eat('SYMBOL', ':')
-                val = self.parse_expression()
-                pairs.append((key, val))
-                if self.peek() and self.peek().value == ',':
-                    self.eat('SYMBOL', ',')
-            self.eat('SYMBOL', '}')
-            return ASTNode('Dict', pairs=pairs)
-        raise SyntaxError(f"Unexpected token {tok} at line {tok.line}")
+                k = self.eat('STRING').value; self.eat('SYMBOL', ':'); v = self.parse_expr(); ps.append((k,v))
+                if self.peek().value == ',': self.eat('SYMBOL', ',')
+            self.eat('SYMBOL', '}'); return ASTNode('Dict', ps=ps)
+        raise SyntaxError(f"Unexpected {t}")

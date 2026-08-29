@@ -1,0 +1,7 @@
+let name = "Sayan"
+print("Hello ${name}!")
+class Animal { fn init(this, n) { this.name = n } fn speak(this) { print(this.name) } }
+class Dog extends Animal { fn init(this, n) { this.name = n } }
+let d = new Dog("Rex")
+d.speak()
+try { throw "Error!" } catch e { print("Caught: ${e}") }
