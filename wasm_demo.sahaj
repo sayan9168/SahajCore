@@ -1,0 +1,2 @@
+fn add(a, b) { return a + b }
+fn mul3(x) { return x * 3 }
