@@ -30,9 +30,12 @@ class Parser:
             if t.value == 'class': return self.parse_class()
             if t.value == 'try': return self.parse_try()
             if t.value == 'throw': return self.parse_throw()
+            if t.value == 'import': return self.parse_import()
             if t.value == 'break': self.eat(); return ASTNode('Break')
             if t.value == 'continue': self.eat(); return ASTNode('Continue')
             if t.value == 'match': return self.parse_match()
+            if t.value == 'async': self.eat(); n = self.parse_fn(); n.is_async = True; return n
+            if t.value == 'yield': return self.parse_yield()
         e = self.parse_expr()
         if self.peek() and self.peek().value == ';': self.eat('SYMBOL', ';')
         return e
@@ -57,7 +60,9 @@ class Parser:
                 raise SyntaxError("Expected parameter name")
             if self.peek().value == ',': self.eat('SYMBOL', ',')
         self.eat('SYMBOL', ')'); body = self.parse_block()
-        return ASTNode('FnDef', name=name, params=params, body=body)
+        n = ASTNode('FnDef', name=name, params=params, body=body)
+        n.is_async = False
+        return n
 
     def parse_block(self):
         self.eat('SYMBOL', '{'); stmts = []
@@ -107,6 +112,12 @@ class Parser:
         if self.peek() and self.peek().value == ';': self.eat('SYMBOL', ';')
         return ASTNode('Throw', value=v)
 
+    def parse_import(self):
+        self.eat('KEYWORD', 'import')
+        return ASTNode('Import', path=self.eat('STRING').value)
+    def parse_yield(self):
+        self.eat('KEYWORD', 'yield')
+        return ASTNode('Yield', value=self.parse_expr())
     def parse_expr(self): return self.parse_ternary()
     def parse_ternary(self):
         c = self.parse_or()
@@ -154,6 +165,7 @@ class Parser:
             o = self.eat().value; l = ASTNode('Bin', op=o, l=l, r=self.parse_unary())
         return l
     def parse_unary(self):
+        if self.peek() and self.peek().type == 'KEYWORD' and self.peek().value == 'await': self.eat(); return ASTNode('Await', v=self.parse_unary())
         if self.peek() and self.peek().value == 'not': self.eat(); return ASTNode('Un', op='not', v=self.parse_unary())
         if self.peek() and self.peek().value == '-': self.eat(); return ASTNode('Un', op='-', v=self.parse_unary())
         return self.parse_post()

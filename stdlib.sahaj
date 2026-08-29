@@ -1,0 +1,25 @@
+fn abs(x) { return x < 0 ? 0 - x : x }
+fn max(a, b) { return a > b ? a : b }
+fn min(a, b) { return a < b ? a : b }
+fn clamp(x, lo, hi) { return min(max(x, lo), hi) }
+fn sum_list(lst) {
+    let t = 0
+    for x in lst { t = t + x }
+    return t
+}
+fn avg_list(lst) { return sum_list(lst) / len(lst) }
+fn reverse_list(lst) {
+    let r = []
+    let i = len(lst) - 1
+    while i >= 0 {
+        r.push(lst[i])
+        i = i - 1
+    }
+    return r
+}
+fn repeat(s, n) {
+    let r = ""
+    let i = 0
+    while i < n { r = r + s; i = i + 1 }
+    return r
+}

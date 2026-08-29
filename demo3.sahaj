@@ -1,0 +1,23 @@
+import "stdlib.sahaj"
+print("abs(-5) = ${abs(-5)}")
+print("max(3, 9) = ${max(3, 9)}")
+print("sum = ${sum_list([1,2,3,4,5])}")
+print("rev = ${reverse_list([1,2,3])}")
+
+fn count_up(n) {
+    let i = 0
+    while i < n {
+        yield i
+        i = i + 1
+    }
+}
+print("generator:")
+for x in count_up(4) {
+    print("  yielded ${x}")
+}
+
+async fn fetch_data() {
+    return "data-from-server"
+}
+let result = await fetch_data()
+print("awaited: ${result}")

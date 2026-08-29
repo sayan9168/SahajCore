@@ -52,6 +52,43 @@ class Interp:
         import math as _m
         self.g.set('math', {'sqrt': BFunc('sqrt', _m.sqrt), 'floor': BFunc('floor', _m.floor), 'ceil': BFunc('ceil', _m.ceil), 'pow': BFunc('pow', _m.pow), 'pi': _m.pi})
         self.g.set('string', {'upper': BFunc('upper', lambda s: s.upper()), 'lower': BFunc('lower', lambda s: s.lower()), 'reverse': BFunc('reverse', lambda s: s[::-1])})
+    def has_yield(self, body):
+        for s in body:
+            if self._hy(s): return True
+        return False
+    def _hy(self, n):
+        if getattr(n, 'type', '') == 'Yield': return True
+        for k in ('then', 'els', 'body', 'value', 'l', 'r', 'v', 'a', 'b', 'c'):
+            v = getattr(n, k, None)
+            if isinstance(v, list):
+                for x in v:
+                    if hasattr(x, 'type') and self._hy(x): return True
+            elif hasattr(v, 'type') and self._hy(v): return True
+        return False
+    def invoke(self, fn, args):
+        fe = Env(fn.c)
+        for p, a in zip(fn.p, args): fe.set(p, a)
+        try:
+            for s in fn.b: self.ev(s, fe)
+        except Ret as r: return r.v
+        return None
+    def run_gen(self, fn, args):
+        fe = Env(fn.c)
+        for p, a in zip(fn.p, args): fe.set(p, a)
+        return self.exec_gen(fn.b, fe)
+    def exec_gen(self, body, e):
+        for s in body:
+            if s.type == 'Yield': yield self.ev(s.value, e)
+            elif s.type == 'While':
+                while self.ev(s.cond, e): yield from self.exec_gen(s.body, e)
+            elif s.type == 'For':
+                for it in self.ev(s.iter, e):
+                    le = Env(e); le.set(s.var, it)
+                    yield from self.exec_gen(s.body, le)
+            elif s.type == 'If':
+                if self.ev(s.cond, e): yield from self.exec_gen(s.then, e)
+                elif s.els: yield from self.exec_gen(s.els, e)
+            else: self.ev(s, e)
     def run(self, ast, env=None):
         env = env or self.g
         r = None
@@ -92,7 +129,17 @@ class Interp:
             if n.op == 'or': return self.ev(n.l, e) or self.ev(n.r, e)
             l, r = self.ev(n.l, e), self.ev(n.r, e)
             if n.op == 'in': return l in r
-            return {'+': l+r, '-': l-r, '*': l*r, '/': l/r, '%': l%r, '==': l==r, '!=': l!=r, '<': l<r, '>': l>r, '<=': l<=r, '>=': l>=r}[n.op]
+            if n.op == '+': return l + r
+            if n.op == '-': return l - r
+            if n.op == '*': return l * r
+            if n.op == '/': return l / r
+            if n.op == '%': return l % r
+            if n.op == '==': return l == r
+            if n.op == '!=': return l != r
+            if n.op == '<': return l < r
+            if n.op == '>': return l > r
+            if n.op == '<=': return l <= r
+            if n.op == '>=': return l >= r
         if t == 'Un':
             v = self.ev(n.v, e)
             return -v if n.op == '-' else not v
@@ -116,6 +163,8 @@ class Interp:
             c = self.ev(n.c, e)
             if isinstance(c, BFunc): return c.f(*args)
             if isinstance(c, Func):
+                if getattr(c, 'is_async', False): return ('TASK', c, args)
+                if getattr(c, 'gen', False): return self.run_gen(c, args)
                 fe = Env(c.c)
                 for p, a in zip(c.p, args): fe.set(p, a)
                 try:
@@ -146,12 +195,26 @@ class Interp:
             if isinstance(o, dict): return o.get(n.f)
         if t == 'FnDef':
             fn = Func(n.name, n.params, n.body, e)
+            fn.gen = self.has_yield(n.body)
+            fn.is_async = getattr(n, 'is_async', False)
             if n.name: e.set(n.name, fn)
             return fn
         if t == 'ClassDef':
             pc = e.get(n.parent) if n.parent else None; ms = {}; ce = Env(e)
             for m in n.methods: ms[m.name] = Func(m.name, m.params, m.body, ce)
             cls = Cls(n.name, pc, ms); e.set(n.name, cls); return cls
+        if t == 'Import':
+            p = n.path
+            if not os.path.exists(p):
+                p = os.path.join(os.path.dirname(__file__), p)
+            from lexer import tokenize as _tok
+            from parser import Parser as _P
+            self.run(_P(_tok(open(p).read())).parse(), e)
+            return None
+        if t == 'Await':
+            v = self.ev(n.v, e)
+            if isinstance(v, tuple) and v and v[0] == 'TASK': return self.invoke(v[1], v[2])
+            return v
         if t == 'Break': raise Brk()
         if t == 'Continue': raise Cont()
         if t == 'Ternary': return self.ev(n.a, e) if self.ev(n.c, e) else self.ev(n.b, e)

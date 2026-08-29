@@ -1,0 +1,14 @@
+let a = 10
+let b = 20
+let c = a + b * 2
+print(c)
+if c > 40 {
+    print("big")
+} else {
+    print("small")
+}
+let i = 0
+while i < 3 {
+    print(i)
+    i = i + 1
+}
