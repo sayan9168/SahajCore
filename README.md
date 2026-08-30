@@ -1,3 +1,4 @@
+<p align="center"><img src="banner.png" width="600"></p>
 # SahajCore
 
 A minimalist, dynamically-typed programming language with a **self-hosting interpreter** — an interpreter for SahajCore, written in SahajCore itself.
